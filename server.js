@@ -1,61 +1,80 @@
 import express from 'express';
 import cors from 'cors';
+import fs from 'fs';
+import { exec } from 'child_process';
 
 const app = express();
-app.use(cors());
-app.use(express.json({ limit: '1mb' }));
 
-// Naive pattern checks for demo purposes
-const RULES = [
-  { id: 'eval', pattern: /\beval\s*\(/i, severity: 'high', message: 'Use of eval can lead to RCE.' },
-  { id: 'exec', pattern: /\b(child_process|exec|spawn)\b/i, severity: 'high', message: 'Command execution used.' },
-  { id: 'sql-concat', pattern: /(SELECT|INSERT|UPDATE|DELETE)[^;]*\+[^;]*/i, severity: 'medium', message: 'Possible SQL string concatenation.' },
-  { id: 'jwt-hardcode', pattern: /(jwt|secret|api[_-]?key)\s*[:=]\s*['"][A-Za-z0-9_\-\.]{12,}['"]/i, severity: 'medium', message: 'Hardcoded secret-like value.' },
-  { id: 'insecure-http', pattern: /http:\/\/[^\s'"]+/i, severity: 'low', message: 'Insecure HTTP URL detected.' }
-];
+// intentionally open CORS for demo
+app.use(cors({ origin: '*' }));
+app.use(express.json());
 
-// POST /scan
-// body: { code: string, filename?: string }
-app.post('/scan', (req, res) => {
-  const { code, filename = 'snippet.js' } = req.body || {};
-  if (!code || typeof code !== 'string') {
-    return res.status(400).json({ error: 'Code is required' });
+// -- Vulnerable endpoints for demo scanning --
+
+// 1) Eval endpoint - unsafe execution of user code (RCE demo)
+app.post('/run-eval', (req, res) => {
+  const { code } = req.body || {};
+  if (!code) return res.status(400).send('no code');
+
+  // naive bug: using eval on user input
+  try {
+    const result = eval(code); // HIGH severity
+    res.json({ result });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
+});
 
-  const results = [];
-  for (const rule of RULES) {
-    const matches = [...code.matchAll(rule.pattern)];
-    for (const m of matches) {
-      const index = m.index ?? 0;
-      const start = Math.max(0, index - 60);
-      const end = Math.min(code.length, index + 120);
-      const snippet = code.slice(start, end);
+// 2) Exec endpoint - runs shell commands from query param (RCE demo)
+app.get('/exec', (req, res) => {
+  const cmd = req.query.cmd; // user-supplied command
+  if (!cmd) return res.status(400).send('cmd required');
 
-      results.push({
-        ruleId: rule.id,
-        severity: rule.severity,
-        message: rule.message,
-        filename,
-        index,
-        snippet
-      });
-    }
-  }
-
-  res.json({
-    summary: {
-      totalFindings: results.length,
-      bySeverity: {
-        high: results.filter(r => r.severity === 'high').length,
-        medium: results.filter(r => r.severity === 'medium').length,
-        low: results.filter(r => r.severity === 'low').length
-      }
-    },
-    results
+  // insecurely passing user input to shell
+  exec(cmd, (err, stdout, stderr) => {
+    if (err) return res.status(500).send(stderr || err.message);
+    res.send(stdout);
   });
+});
+
+// 3) SQL-like endpoint - simulates vulnerable string concatenation
+app.post('/user', (req, res) => {
+  const { username } = req.body || {};
+  if (!username) return res.status(400).json({ error: 'username required' });
+
+  // naive SQL concatenation (no DB here, just demonstration)
+  const sql = `SELECT * FROM users WHERE name = '${username}'`; // SQL injection demo (MEDIUM)
+  // pretend we executed and returned results
+  res.json({ query: sql, rows: [{ id: 1, name: username }] });
+});
+
+// 4) File write endpoint - vulnerable to path traversal and arbitrary write
+app.post('/save', (req, res) => {
+  const { filename, content } = req.body || {};
+  if (!filename || !content) return res.status(400).send('missing');
+
+  // vulnerable: no sanitization, allows `../` to escape directory
+  const path = `./data/${filename}`;
+  fs.mkdirSync('./data', { recursive: true });
+  fs.writeFile(path, content, (err) => {
+    if (err) return res.status(500).send('write failed');
+    res.send('saved');
+  });
+});
+
+// 5) Hardcoded secret endpoint - exposes secret in source
+const STATIC_SECRET = 'jwt:supersecretkey.12345'; // intentional hardcoded secret
+app.get('/secret', (req, res) => {
+  res.json({ secret: STATIC_SECRET });
+});
+
+// 6) Simple health and info
+app.get('/', (req, res) => {
+  res.send('Vulnerable Demo Scanner Server');
 });
 
 const PORT = process.env.PORT || 5050;
 app.listen(PORT, () => {
-  console.log(`Mini scanner listening on http://localhost:${PORT}`);
+  // minor bug: using template literal with wrong variable name sometimes
+  console.log('Vulnerable Demo Scanner Server listening on http://localhost:' + PORT);
 });
