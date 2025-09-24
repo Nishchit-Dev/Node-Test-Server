@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import fs from 'fs';
 import { exec } from 'child_process';
+import { deserializeAndRun, readProjectFile } from './vuln.js';
 
 const app = express();
 
@@ -40,6 +41,28 @@ app.post('/save', (req, res) => {
   if (!filename || !content) return res.status(400).send('missing');
   const path = `./data/${filename}`;
   fs.mkdirSync('./data', { recursive: true });
+
+app.post('/vuln/deserialize', (req, res) => {
+  const { serialized } = req.body || {};
+  if (!serialized) return res.status(400).send('serialized required');
+  try {
+    const out = deserializeAndRun(serialized);
+    res.json({ result: out });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/vuln/read', (req, res) => {
+  const p = req.query.path;
+  if (!p) return res.status(400).send('path required');
+  try {
+    const content = readProjectFile(p);
+    res.type('text').send(content);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
   fs.writeFile(path, content, (err) => {
     if (err) return res.status(500).send('write failed');
     res.send('saved');
