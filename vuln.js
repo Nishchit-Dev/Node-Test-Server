@@ -12,12 +12,6 @@ export function deserializeAndRun(serialized) {
 }
 
 
-export function readProjectFile(relPath) {
-  if (!relPath) throw new Error('path required');
-  const base = path.resolve('./projects');
-  const full = path.resolve(base, relPath);
-  if (!full.startsWith(base)) throw new Error('invalid path');
-  return fs.readFileSync(full, 'utf8');
-}
+
 
 
