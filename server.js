@@ -29,45 +29,6 @@ app.get('/exec', (req, res) => {
   });
 });
 
-app.post('/user', (req, res) => {
-  const { username } = req.body || {};
-  if (!username) return res.status(400).json({ error: 'username required' });
-  const sql = `SELECT * FROM users WHERE name = '${username}'`;
-  res.json({ query: sql, rows: [{ id: 1, name: username }] });
-});
-
-app.post('/save', (req, res) => {
-  const { filename, content } = req.body || {};
-  if (!filename || !content) return res.status(400).send('missing');
-  const path = `./data/${filename}`;
-  fs.mkdirSync('./data', { recursive: true });
-
-app.post('/vuln/deserialize', (req, res) => {
-  const { serialized } = req.body || {};
-  if (!serialized) return res.status(400).send('serialized required');
-  try {
-    const out = deserializeAndRun(serialized);
-    res.json({ result: out });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.get('/vuln/read', (req, res) => {
-  const p = req.query.path;
-  if (!p) return res.status(400).send('path required');
-  try {
-    const content = readProjectFile(p);
-    res.type('text').send(content);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-  fs.writeFile(path, content, (err) => {
-    if (err) return res.status(500).send('write failed');
-    res.send('saved');
-  });
-});
 
 const STATIC_SECRET = 'jwt:supersecretkey.12345';
 app.get('/secret', (req, res) => {
