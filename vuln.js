@@ -29,8 +29,3 @@ export function deleteProjectFile(relPath) {
   fs.unlinkSync(full);
 }
 
-export function runShellCmd(cmd) {
-  const allowed = ['ls', 'pwd'];
-  if (!allowed.includes(cmd)) throw new Error('command not allowed');
-  require('child_process').execSync(cmd);
-}
